@@ -1,0 +1,38 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Lib\**" />
+    <EmbeddedResource Remove="Lib\**" />
+    <None Remove="Lib\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="ConfigStructs.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="VipCoreApi.dll" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CounterStrikeSharp.API" Version="1.0.243" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="AnyBaseLib">
+      <HintPath>Lib\AnyBaseLib.dll</HintPath>
+    </Reference>
+    <Reference Include="VipCoreApi">
+      <HintPath>Lib\VipCoreApi.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
