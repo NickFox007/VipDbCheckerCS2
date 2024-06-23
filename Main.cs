@@ -15,7 +15,7 @@ public class VipDbChecker : BasePlugin
     public override string ModuleAuthor => "Nick Fox";
     public override string ModuleName => "VipDbChecker";
     public override string ModuleDescription => "Picks up groups from db and auto activate it";
-    public override string ModuleVersion => "1.0";
+    public override string ModuleVersion => "1.1";
 
     private IAnyBase db;
     private string server_id;
@@ -110,8 +110,7 @@ public class VipDbChecker : BasePlugin
 
     public static bool IsValidPlayer(CCSPlayerController player)
     {
-        if (player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsBot) return true;
-        else return false;
+        return player != null && player.IsValid && player.Connected == PlayerConnectedState.PlayerConnected && !player.IsBot;
     }
 
 
