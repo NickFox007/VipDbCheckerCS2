@@ -16,7 +16,7 @@ public class VipDbChecker : BasePlugin
     public override string ModuleAuthor => "Nick Fox";
     public override string ModuleName => "VipDbChecker";
     public override string ModuleDescription => "Picks up groups from db and auto activate it without reconnecting";
-    public override string ModuleVersion => "1.2";
+    public override string ModuleVersion => "1.3";
 
     private IAnyBase db;
     private string server_id;
@@ -101,7 +101,7 @@ public class VipDbChecker : BasePlugin
 
         if (players.Count > 0)
             //db.QueryAsync("SELECT `account_id`, `group`, (`expires`- UNIX_TIMESTAMP()) as `time`, `expires` FROM `vip_users` WHERE `sid` = {ARG} HAVING (`time` > 0 OR `expires` = 0)", [server_id]);
-            db.QueryAsync("SELECT `account_id`, `group`, (`expires`- UNIX_TIMESTAMP()) as `time`, `expires` FROM `vip_users` WHERE `sid` = {ARG} HAVING (`time` > 0 OR `expires` = 0)", [server_id], (data) => QueryCallback(data, players, steamids));
+            db.QueryAsync("SELECT `account_id`, `group`, CAST(`expires` as SIGNED) - UNIX_TIMESTAMP() as `time`, `expires` FROM `vip_users` WHERE `sid` = {ARG} HAVING (`time` > 0 OR `expires` = 0)", [server_id], (data) => QueryCallback(data, players, steamids));
     }
 
     string GetExpireTime(int expires)
