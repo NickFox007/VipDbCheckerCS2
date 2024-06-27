@@ -8,17 +8,20 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Globalization;
 using System.IO;
+using System.Numerics;
 using VipCoreApi;
 
 public class VipDbChecker : BasePlugin
 {
     public override string ModuleAuthor => "Nick Fox";
     public override string ModuleName => "VipDbChecker";
-    public override string ModuleDescription => "Picks up groups from db and auto activate it";
-    public override string ModuleVersion => "1.1";
+    public override string ModuleDescription => "Picks up groups from db and auto activate it without reconnecting";
+    public override string ModuleVersion => "1.2";
 
     private IAnyBase db;
     private string server_id;
+    private bool timer_enabled = true;
+    private bool timer_stopped = false;
 
     private IVipCoreApi? _vip;
     private PluginCapability<IVipCoreApi> PluginVip { get; } = new("vipcore:core");
@@ -48,24 +51,57 @@ public class VipDbChecker : BasePlugin
         db.Set(AnyBaseLib.Bases.CommitMode.NoCommit, db_name, db_host, db_user, db_pass);
 
         db.Init();
-        
-        AddTimer(10.0f, CheckAllPlayers, CounterStrikeSharp.API.Modules.Timers.TimerFlags.REPEAT);
+
+        //AddTimer(10.0f, CheckAllPlayers, CounterStrikeSharp.API.Modules.Timers.TimerFlags.REPEAT);
+        StartTimer();
     }
 
+    void StartTimer()
+    {
+        Task.Run(() =>
+        {
+            int count = 0;
+            while (timer_enabled)
+            {
+                Thread.Sleep(500);
+                count++;
+
+                if (count == 20)
+                {
+                    count = 0;
+                    Server.NextFrameAsync(CheckAllPlayers);
+                }
+            }
+            timer_stopped = true;
+        });
+    }
+
+    public override void Unload(bool hotReload)
+    {
+        timer_enabled = false;
+        while(!timer_stopped)
+            Thread.Sleep(250);
+    }
 
     void CheckAllPlayers()
-    {
-        foreach(var player in Utilities.GetPlayers())
-        {
-            if(IsValidPlayer(player))
-                CheckPlayer(player);
-        }
-    }
-
-    void CheckPlayer(CCSPlayerController player)
     {        
-        var account_id = player.AuthorizedSteamID.AccountId.ToString();
-        db.QueryAsync("SELECT `group`, (`expires`- UNIX_TIMESTAMP()) as `time`, `expires` FROM `vip_users` WHERE `sid` = {ARG} AND `account_id` = {ARG} HAVING (`time` > 0 OR `expires` = 0)", [server_id, account_id], (data) => QueryCallback(data, player));
+        var players = Utilities.GetPlayers();
+        List<string> steamids = [];
+        
+        for(int i = 0; i < players.Count; i++)
+        {
+            if (!IsValidPlayer(players[i]))
+            {
+                players.RemoveAt(i);
+                i--;                
+            }
+            else
+                steamids.Add(players[i].AuthorizedSteamID.AccountId.ToString());
+        }
+
+        if (players.Count > 0)
+            //db.QueryAsync("SELECT `account_id`, `group`, (`expires`- UNIX_TIMESTAMP()) as `time`, `expires` FROM `vip_users` WHERE `sid` = {ARG} HAVING (`time` > 0 OR `expires` = 0)", [server_id]);
+            db.QueryAsync("SELECT `account_id`, `group`, (`expires`- UNIX_TIMESTAMP()) as `time`, `expires` FROM `vip_users` WHERE `sid` = {ARG} HAVING (`time` > 0 OR `expires` = 0)", [server_id], (data) => QueryCallback(data, players, steamids));
     }
 
     string GetExpireTime(int expires)
@@ -76,8 +112,68 @@ public class VipDbChecker : BasePlugin
             return DateTimeOffset.FromUnixTimeSeconds(expires).ToString("G");
 
     }
+        
+    void GivePlayerVip(CCSPlayerController player, string group, int time, int expires)
+    {
+        Server.NextFrame(() =>
+        {
+            _vip.PrintToChat(player, String.Format(Localizer["given"], group));
+            _vip.PrintToChat(player, String.Format(Localizer["expires"], GetExpireTime(expires)));
+            _vip.GiveClientTemporaryVip(player, group, time);
+        });
+    }
 
-    void QueryCallback(List<List<string>> data, CCSPlayerController player)
+    void TakePlayerVip(CCSPlayerController player)
+    {
+        Server.NextFrame(() =>
+        {
+            _vip.PrintToChat(player, Localizer["taken"]);
+            _vip.RemoveClientVip(player);
+        });
+    }
+
+    void QueryCallback(List<List<string>> data, List<CCSPlayerController> players, List<string> steamids)
+    {
+        Task.Run(() =>
+        {
+            bool given;
+            bool isVip;
+            int index = 0;
+            foreach (var player in players)
+            {
+                
+                isVip = _vip.IsClientVip(player);
+                
+                given = false;
+                foreach (var line in data)
+                    //if (line[0] == player.AuthorizedSteamID.AccountId.ToString())
+                    if (line[0] == steamids[index])
+                    {
+                        given = true;
+
+                        if (!isVip)
+                        {
+                            var time = 0;
+                            if (!line[2].Equals("0"))
+                                time = int.Parse(line[2]);
+                            GivePlayerVip(player, line[1], time, int.Parse(line[3]));
+                        }
+
+                        break;
+                    }
+                if (!given && isVip)
+                {
+                    TakePlayerVip(player);
+                }
+
+                index++;
+
+            }
+        });
+    }
+
+    /*
+    void QueryCallback2(List<List<string>> data, CCSPlayerController player)
     {
         var isVip = _vip.IsClientVip(player);
         Server.NextFrame(() =>
@@ -101,12 +197,13 @@ public class VipDbChecker : BasePlugin
             else
                 if (isVip)
                 {
-                _vip.PrintToChat(player, Localizer["taken"]);
-                //player.PrintToChat("Вы лишились дополнительных VIP возможностей :(");
+                    _vip.PrintToChat(player, Localizer["taken"]);
+                    //player.PrintToChat("Вы лишились дополнительных VIP возможностей :(");
                     _vip.RemoveClientVip(player);
                 }
         });
     }
+    */
 
     public static bool IsValidPlayer(CCSPlayerController player)
     {
