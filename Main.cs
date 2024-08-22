@@ -4,6 +4,7 @@ using CounterStrikeSharp.API;
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Capabilities;
 using CounterStrikeSharp.API.Modules.Entities;
+using CounterStrikeSharp.API.Modules.Cvars;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Globalization;
@@ -16,7 +17,7 @@ public class VipDbChecker : BasePlugin
     public override string ModuleAuthor => "Nick Fox";
     public override string ModuleName => "VipDbChecker";
     public override string ModuleDescription => "Picks up groups from db and auto activate it without reconnecting";
-    public override string ModuleVersion => "1.3";
+    public override string ModuleVersion => "1.4";
 
     private IAnyBase db;
     private string server_id;
@@ -25,6 +26,7 @@ public class VipDbChecker : BasePlugin
 
     private IVipCoreApi? _vip;
     private PluginCapability<IVipCoreApi> PluginVip { get; } = new("vipcore:core");
+    public readonly FakeConVar<bool> IsCoreEnableConVar = new("css_vip_checker_enable", "", true);
 
     public override void OnAllPluginsLoaded(bool hotReload)
     {
@@ -84,7 +86,9 @@ public class VipDbChecker : BasePlugin
     }
 
     void CheckAllPlayers()
-    {        
+    {
+        if (!IsCoreEnableConVar.Value)
+            return;
         var players = Utilities.GetPlayers();
         List<string> steamids = [];
         
@@ -128,7 +132,7 @@ public class VipDbChecker : BasePlugin
         Server.NextFrame(() =>
         {
             _vip.PrintToChat(player, Localizer["taken"]);
-            _vip.RemoveClientVip(player);
+            if (IsValidPlayer(player)) _vip.RemoveClientVip(player);
         });
     }
 
