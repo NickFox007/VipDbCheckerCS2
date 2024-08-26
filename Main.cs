@@ -5,31 +5,32 @@ using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Capabilities;
 using CounterStrikeSharp.API.Modules.Entities;
 using CounterStrikeSharp.API.Modules.Cvars;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
 using System.Globalization;
 using System.IO;
 using System.Numerics;
 using VipCoreApi;
+using VipDbChecker;
 
+namespace VipDbChecker;
 public class VipDbChecker : BasePlugin
 {
     public override string ModuleAuthor => "Nick Fox";
     public override string ModuleName => "VipDbChecker";
     public override string ModuleDescription => "Picks up groups from db and auto activate it without reconnecting";
-    public override string ModuleVersion => "1.4";
+    public override string ModuleVersion => "1.5";
 
     private IAnyBase db;
     private string server_id;
-    private bool timer_enabled = true;
-    private bool timer_stopped = false;
+    private bool timer_enabled = false;
+    private bool timer_stopped = true;
 
     private IVipCoreApi? _vip;
     private PluginCapability<IVipCoreApi> PluginVip { get; } = new("vipcore:core");
-    public readonly FakeConVar<bool> IsCoreEnableConVar = new("css_vip_checker_enable", "", true);
-
+    public readonly FakeConVar<bool> IsCoreEnableConVar = new("css_vip_checker_enable", "Enable/Disable plugin functionality", true);
+    
     public override void OnAllPluginsLoaded(bool hotReload)
-    {
+    {        
         _vip = PluginVip.Get();
 
         if (_vip == null)
@@ -37,29 +38,23 @@ public class VipDbChecker : BasePlugin
 
         db = CAnyBase.Base("mysql");
 
-        dynamic js = JsonConvert.DeserializeObject(File.ReadAllText($"{ModulePath}/../../../configs/plugins/VIPCore/vip_core.json"));
-
-        //dynamic js = JsonConvert.DeserializeObject(File.ReadAllText($"{ModulePath}/../VIPCore/lang/vip_core.json"));
+        var js = JsonSerializer.Deserialize<CfgParams>(File.ReadAllText($"{ModulePath}/../../../configs/plugins/VIPCore/vip_core.json"));
 
         var db_info = js.Connection;
+                        
+        server_id = js.ServerId.ToString();        
 
-        string db_host = db_info.Host.ToString();
-        string db_name = db_info.Database.ToString();
-        string db_user = db_info.User.ToString();
-        string db_pass = db_info.Password.ToString();
-                
-        server_id = js.ServerId.ToString();
-
-        db.Set(AnyBaseLib.Bases.CommitMode.NoCommit, db_name, db_host, db_user, db_pass);
-
+        db.Set(AnyBaseLib.Bases.CommitMode.NoCommit, db_info.Database, db_info.Host, db_info.User, db_info.Password);
         db.Init();
 
-        //AddTimer(10.0f, CheckAllPlayers, CounterStrikeSharp.API.Modules.Timers.TimerFlags.REPEAT);
         StartTimer();
     }
 
     void StartTimer()
     {
+        timer_enabled = true;
+        timer_stopped = false;
+
         Task.Run(() =>
         {
             int count = 0;
@@ -104,7 +99,6 @@ public class VipDbChecker : BasePlugin
         }
 
         if (players.Count > 0)
-            //db.QueryAsync("SELECT `account_id`, `group`, (`expires`- UNIX_TIMESTAMP()) as `time`, `expires` FROM `vip_users` WHERE `sid` = {ARG} HAVING (`time` > 0 OR `expires` = 0)", [server_id]);
             db.QueryAsync("SELECT `account_id`, `group`, CAST(`expires` as SIGNED) - UNIX_TIMESTAMP() as `time`, `expires` FROM `vip_users` WHERE `sid` = {ARG} HAVING (`time` > 0 OR `expires` = 0)", [server_id], (data) => QueryCallback(data, players, steamids));
     }
 
@@ -119,7 +113,7 @@ public class VipDbChecker : BasePlugin
         
     void GivePlayerVip(CCSPlayerController player, string group, int time, int expires)
     {
-        Server.NextFrame(() =>
+        Server.NextFrameAsync(() =>
         {
             _vip.PrintToChat(player, String.Format(Localizer["given"], group));
             _vip.PrintToChat(player, String.Format(Localizer["expires"], GetExpireTime(expires)));
@@ -129,7 +123,7 @@ public class VipDbChecker : BasePlugin
 
     void TakePlayerVip(CCSPlayerController player)
     {
-        Server.NextFrame(() =>
+        Server.NextFrameAsync(() =>
         {
             _vip.PrintToChat(player, Localizer["taken"]);
             if (IsValidPlayer(player)) _vip.RemoveClientVip(player);
